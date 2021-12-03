@@ -10,16 +10,20 @@
     <title>{{ config('app.name', 'Laravel') }}</title>
 
     <!-- Styles -->
-    <link href="{{ mix('css/app.css') }}" rel="stylesheet">
+    <link href="{{ asset('css/app.css') }}" rel="stylesheet">
     <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+
+    @livewireStyles
 </head>
-<body>
-<div id="app">
+<body class="overflow-x-hidden">
+    <div id="app">
+        <livewire:show-data />
+    </div>
 
-</div>
+    <!-- Scripts -->
+    <script src="{{ asset('js/app.js') }}"></script>
+    <script defer src="https://unpkg.com/alpinejs@3.6.1/dist/cdn.min.js"></script>
 
-<!-- Scripts -->
-<script src="{{ mix('js/app.js') }}"></script>
-<script defer src="https://unpkg.com/alpinejs@3.6.1/dist/cdn.min.js"></script>
+    @livewireScripts
 </body>
 </html>

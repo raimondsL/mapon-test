@@ -3,7 +3,7 @@
 namespace App\Services;
 
 
-use App\Entities\AVLData;
+use App\Models\AVLData;
 use App\Entities\GPSData;
 use App\Entities\IOData;
 
@@ -14,7 +14,6 @@ class TeltonikaDecoder
 
     const TIMESTAMP_HEX_LENGTH = 16;
     const PRIORITY_HEX_LENGTH = 2;
-    const GPSDATA_HEX_LENGTH = 30;
 
     const LONGITUDE_HEX_LENGTH = 8;
     const LATITUDE_HEX_LENGTH = 8;
@@ -53,9 +52,15 @@ class TeltonikaDecoder
         return hexdec($codecTypeHex);
     }
 
-    public function decodeAVLData(string $hexDataOfElement) :AVLData
+    public function decodeAndSaveData()
     {
-        return $this->codec8Decode($hexDataOfElement);
+        $AVLArray = [];
+
+        foreach ($this->getArrayOfAllData() as $item) {
+            $AVLArray[] = AVLData::create($item->jsonSerialize());
+        }
+
+        return $AVLArray;
     }
 
     public function getArrayOfAllData(): array
@@ -64,12 +69,11 @@ class TeltonikaDecoder
         $AVLArray = [];
 
         if ($codecType == self::CODEC8) {
-            $hexDataWithoutCRC = substr($this->dataFromDevice, 0, -8);
             $dataCount = $this->getNumberOfElements();
             $this->currentPosition = self::HEX_DATA_HEADER;
 
             for ($i = 0; $i < $dataCount; $i++) {
-                $AVLArray[] = $this->decodeAVLData($hexDataWithoutCRC);
+                $AVLArray[] = $this->codec8Decode($this->dataFromDevice);
             }
         }
 
@@ -81,11 +85,11 @@ class TeltonikaDecoder
         $AVLData = new AVLData();
 
         $timestamp = substr(hexdec(substr($hexDataOfElement, $this->currentPosition, self::TIMESTAMP_HEX_LENGTH)), 0, 10);
-        $AVLData->setTimestamp($timestamp);
+        $AVLData->timestamp = $timestamp;
         $this->currentPosition += self::TIMESTAMP_HEX_LENGTH;
 
         $priority = hexdec(substr($hexDataOfElement, $this->currentPosition, self::PRIORITY_HEX_LENGTH));
-        $AVLData->setPriority($priority);
+        $AVLData->priority = $priority;
         $this->currentPosition += self::PRIORITY_HEX_LENGTH;
 
         $longitudeValueOnArrayTwoComplement = unpack("l", pack("l", hexdec(substr($hexDataOfElement, $this->currentPosition, self::LONGITUDE_HEX_LENGTH))));
@@ -108,7 +112,7 @@ class TeltonikaDecoder
         $this->currentPosition += self::SPEED_HEX_LENGTH;
 
         $GPSData = new GPSData($longitude, $latitude, $altitude, $angle, $satellites, $speed);
-        $AVLData->setGpsData($GPSData);
+        $AVLData->gps_data = $GPSData;
 
         $this->currentPosition += self::IO_ID_HEX_LENGTH;
         $nCount = hexdec(substr($hexDataOfElement, $this->currentPosition, self::IO_COUNT_HEX_LENGTH));
@@ -172,7 +176,7 @@ class TeltonikaDecoder
         }
 
         $IOData = new IOData($array);
-        $AVLData->setIOData($IOData);
+        $AVLData->io_data = $IOData;
 
         return $AVLData;
     }
