@@ -11,8 +11,8 @@ class SchedulerLog extends Model
 
     protected $guarded = [];
 
-    public static function maxOffset()
+    public static function lastOffset()
     {
-        return self::max('offset') ?? 0;
+        return self::latest('id')->value('offset') ?? 0;
     }
 }

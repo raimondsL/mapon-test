@@ -7,7 +7,7 @@ class IOData implements \JsonSerializable
 {
 
     public function __construct(
-
+        private array $array
     )
     {
         //
@@ -15,6 +15,6 @@ class IOData implements \JsonSerializable
 
     public function jsonSerialize()
     {
-        // TODO: Implement jsonSerialize() method.
+        return $this->array;
     }
 }

@@ -6,13 +6,10 @@ namespace App\Services;
 use App\Entities\AVLData;
 use App\Entities\GPSData;
 use App\Entities\IOData;
-use Illuminate\Support\Str;
 
 class TeltonikaDecoder
 {
-
     const HEX_DATA_HEADER = 20;
-
     const CODEC8 = 8;
 
     const TIMESTAMP_HEX_LENGTH = 16;
@@ -28,14 +25,15 @@ class TeltonikaDecoder
 
     const IO_ID_HEX_LENGTH = 2;
     const IO_COUNT_HEX_LENGTH = 2;
-    const VALUE_1B_HEX_LENGTH = 2;
-    const VALUE_2B_HEX_LENGTH = 4;
-    const VALUE_4B_HEX_LENGTH = 8;
-    const VALUE_8B_HEX_LENGTH = 16;
+    const VALUE_N1_HEX_LENGTH = 2;
+    const VALUE_N2_HEX_LENGTH = 4;
+    const VALUE_N4_HEX_LENGTH = 8;
+    const VALUE_N8_HEX_LENGTH = 16;
+
+    private $currentPosition = 0;
 
     public function __construct(
         private string $dataFromDevice,
-        private array $AVLData = []
     )
     {
         //
@@ -57,29 +55,22 @@ class TeltonikaDecoder
 
     public function decodeAVLData(string $hexDataOfElement) :AVLData
     {
-        $codecType = $this->getCodecType();
-
-        if($codecType == self::CODEC8) {
-            return $this->codec8Decode($hexDataOfElement);
-        }
+        return $this->codec8Decode($hexDataOfElement);
     }
 
     public function getArrayOfAllData(): array
     {
+        $codecType = $this->getCodecType();
         $AVLArray = [];
 
-        $hexDataWithoutCRC = substr($this->dataFromDevice, 0, -8);
+        if ($codecType == self::CODEC8) {
+            $hexDataWithoutCRC = substr($this->dataFromDevice, 0, -8);
+            $dataCount = $this->getNumberOfElements();
+            $this->currentPosition = self::HEX_DATA_HEADER;
 
-        $dataCount = $this->getNumberOfElements();
-
-        $startPosition = self::HEX_DATA_HEADER;
-
-        for ($i = 0; $i < $dataCount; $i++) {
-            $hexAVLData = $this->getHexAVLData(substr($hexDataWithoutCRC, $startPosition));
-
-            $AVLArray[] = $this->decodeAVLData($hexAVLData);
-
-            $startPosition += Str::length($hexAVLData);
+            for ($i = 0; $i < $dataCount; $i++) {
+                $AVLArray[] = $this->decodeAVLData($hexDataWithoutCRC);
+            }
         }
 
         return $AVLArray;
@@ -89,40 +80,100 @@ class TeltonikaDecoder
 
         $AVLData = new AVLData();
 
-        //We only get first 10 characters to get timestamp up to seconds.
-        $timestamp = substr(hexdec(substr($hexDataOfElement, 0, self::TIMESTAMP_HEX_LENGTH)), 0, 10);
+        $timestamp = substr(hexdec(substr($hexDataOfElement, $this->currentPosition, self::TIMESTAMP_HEX_LENGTH)), 0, 10);
         $AVLData->setTimestamp($timestamp);
+        $this->currentPosition += self::TIMESTAMP_HEX_LENGTH;
 
-        $currentPosition = self::TIMESTAMP_HEX_LENGTH;
-
-        $priority = hexdec(substr($hexDataOfElement, $currentPosition, self::PRIORITY_HEX_LENGTH));
+        $priority = hexdec(substr($hexDataOfElement, $this->currentPosition, self::PRIORITY_HEX_LENGTH));
         $AVLData->setPriority($priority);
-        $currentPosition += self::PRIORITY_HEX_LENGTH;
+        $this->currentPosition += self::PRIORITY_HEX_LENGTH;
 
-        $longitude = hexdec(substr($hexDataOfElement, $currentPosition, self::LONGITUDE_HEX_LENGTH));
-        $currentPosition += self::LONGITUDE_HEX_LENGTH;
-        $latitude = hexdec(substr($hexDataOfElement, $currentPosition, self::LATITUDE_HEX_LENGTH));
-        $currentPosition += self::LATITUDE_HEX_LENGTH;
-        $altitude = hexdec(substr($hexDataOfElement, $currentPosition, self::ALTITUDE_HEX_LENGTH));
-        $currentPosition += self::ALTITUDE_HEX_LENGTH;
-        $angle = hexdec(substr($hexDataOfElement, $currentPosition, self::ANGLE_HEX_LENGTH));
-        $currentPosition += self::ANGLE_HEX_LENGTH;
-        $satellites = hexdec(substr($hexDataOfElement, $currentPosition, self::SATELLITES_HEX_LENGTH));
-        $currentPosition += self::SATELLITES_HEX_LENGTH;
-        $speed = hexdec(substr($hexDataOfElement, $currentPosition, self::SPEED_HEX_LENGTH));
-        $currentPosition += self::SPEED_HEX_LENGTH;
+        $longitudeValueOnArrayTwoComplement = unpack("l", pack("l", hexdec(substr($hexDataOfElement, $this->currentPosition, self::LONGITUDE_HEX_LENGTH))));
+        $longitude = (float) (reset($longitudeValueOnArrayTwoComplement) / 10000000);
+        $this->currentPosition += self::LONGITUDE_HEX_LENGTH;
+        $latitudeValueOnArrayTwoComplement = unpack("l", pack("l", hexdec(substr($hexDataOfElement, $this->currentPosition, self::LATITUDE_HEX_LENGTH))));
+        $latitude = (float) (reset($latitudeValueOnArrayTwoComplement) / 10000000);
+        $this->currentPosition += self::LATITUDE_HEX_LENGTH;
+
+        $altitude = hexdec(substr($hexDataOfElement, $this->currentPosition, self::ALTITUDE_HEX_LENGTH));
+        $this->currentPosition += self::ALTITUDE_HEX_LENGTH;
+
+        $angle = hexdec(substr($hexDataOfElement, $this->currentPosition, self::ANGLE_HEX_LENGTH));
+        $this->currentPosition += self::ANGLE_HEX_LENGTH;
+
+        $satellites = hexdec(substr($hexDataOfElement, $this->currentPosition, self::SATELLITES_HEX_LENGTH));
+        $this->currentPosition += self::SATELLITES_HEX_LENGTH;
+
+        $speed = hexdec(substr($hexDataOfElement, $this->currentPosition, self::SPEED_HEX_LENGTH));
+        $this->currentPosition += self::SPEED_HEX_LENGTH;
 
         $GPSData = new GPSData($longitude, $latitude, $altitude, $angle, $satellites, $speed);
-
         $AVLData->setGpsData($GPSData);
 
-        //
+        $this->currentPosition += self::IO_ID_HEX_LENGTH;
+        $nCount = hexdec(substr($hexDataOfElement, $this->currentPosition, self::IO_COUNT_HEX_LENGTH));
+        $this->currentPosition += self::IO_COUNT_HEX_LENGTH;
+        $array = [];
 
-        $IOData = new IOData();
+        $n1Count = hexdec(substr($hexDataOfElement, $this->currentPosition, self::IO_COUNT_HEX_LENGTH));
+        $this->currentPosition += self::IO_COUNT_HEX_LENGTH;
 
+        for ($i = 0; $i < $n1Count; $i++) {
+            $id = hexdec(substr($hexDataOfElement, $this->currentPosition, self::IO_ID_HEX_LENGTH));
+            $this->currentPosition += self::IO_ID_HEX_LENGTH;
+            $value = hexdec(substr($hexDataOfElement, $this->currentPosition, self::VALUE_N1_HEX_LENGTH));
+            $this->currentPosition += self::VALUE_N1_HEX_LENGTH;
+            $array[] = [
+                'IO{'.$id.'}' => $value
+            ];
+        }
+
+        $n2Count = hexdec(substr($hexDataOfElement, $this->currentPosition, self::IO_COUNT_HEX_LENGTH));
+        $this->currentPosition += self::IO_COUNT_HEX_LENGTH;
+
+        for ($i = 0; $i < $n2Count; $i++) {
+            $id = hexdec(substr($hexDataOfElement, $this->currentPosition, self::IO_ID_HEX_LENGTH));
+            $this->currentPosition += self::IO_ID_HEX_LENGTH;
+            $value = hexdec(substr($hexDataOfElement, $this->currentPosition, self::VALUE_N2_HEX_LENGTH));
+            $this->currentPosition += self::VALUE_N2_HEX_LENGTH;
+            $array[] = [
+                'IO{'.$id.'}' => $value
+            ];
+        }
+
+        $n4Count = hexdec(substr($hexDataOfElement, $this->currentPosition, self::IO_COUNT_HEX_LENGTH));
+        $this->currentPosition += self::IO_COUNT_HEX_LENGTH;
+
+        for ($i = 0; $i < $n4Count; $i++) {
+            $id = hexdec(substr($hexDataOfElement, $this->currentPosition, self::IO_ID_HEX_LENGTH));
+            $this->currentPosition += self::IO_ID_HEX_LENGTH;
+            $value = hexdec(substr($hexDataOfElement, $this->currentPosition, self::VALUE_N4_HEX_LENGTH));
+            $this->currentPosition += self::VALUE_N4_HEX_LENGTH;
+            $array[] = [
+                'IO{'.$id.'}' => $value
+            ];
+        }
+
+        $n8Count = hexdec(substr($hexDataOfElement, $this->currentPosition, self::IO_COUNT_HEX_LENGTH));
+        $this->currentPosition += self::IO_COUNT_HEX_LENGTH;
+
+        for ($i = 0; $i < $n8Count; $i++) {
+            $id = hexdec(substr($hexDataOfElement, $this->currentPosition, self::IO_ID_HEX_LENGTH));
+            $this->currentPosition += self::IO_ID_HEX_LENGTH;
+            $value = hexdec(substr($hexDataOfElement, $this->currentPosition, self::VALUE_N8_HEX_LENGTH));
+            $this->currentPosition += self::VALUE_N8_HEX_LENGTH;
+            $array[] = [
+                'IO{'.$id.'}' => $value
+            ];
+        }
+
+        if ($nCount != $n1Count + $n2Count + $n4Count + $n8Count) {
+            // Warning!
+        }
+
+        $IOData = new IOData($array);
         $AVLData->setIOData($IOData);
 
         return $AVLData;
-
     }
 }

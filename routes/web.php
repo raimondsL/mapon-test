@@ -14,5 +14,13 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::get('/', function () {
-    return view('app');
+    $hexDataService = new \App\Services\HexDataService();
+    $lastOffset = \App\Models\SchedulerLog::lastOffset();
+    $array = $hexDataService->getEndpointData('https://mapon.com/integration/', '6BD030BBB9E0E34C63672757DC065B8B', $lastOffset >= 99 ? 0 : $lastOffset + 1);
+
+    foreach ($array as $data) {
+        echo $data;
+        $decoder = new \App\Services\TeltonikaDecoder($data);
+        dd($decoder->getArrayOfAllData());
+    }
 });
