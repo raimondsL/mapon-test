@@ -28,5 +28,6 @@ Route::get('/', function () {
 
 //    $item = \App\Models\AVLData::first();
 //    return implode(', ', array_map(fn ($x) => array_keys($x)[0] . ":" . $x[array_keys($x)[0]], $item->io_data));
+
     return view('app');
 });

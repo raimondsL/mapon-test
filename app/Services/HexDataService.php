@@ -20,7 +20,7 @@ class HexDataService
 
         if ($json = $response->json()) {
             foreach ($json['data'] as $data) {
-                Storage::append('txt_raw.log', $data);
+                Storage::append('txt_raw.log', trim($data));
             }
         }
 

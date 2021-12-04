@@ -8,13 +8,15 @@ use Livewire\Component;
 
 class ShowData extends Component
 {
-    public $decodedData;
-    public $rawData;
+    public $decodedData = [];
+
+    public $rawData = [];
 
     public function mount()
     {
-        $this->decodedData = AVLData::all();
-        $this->rawData = file(storage_path('app\txt_raw.log', FILE_IGNORE_NEW_LINES));
+        $this->decodedData = AVLData::all()->toArray();
+
+        $this->readRawFile();
     }
 
     public function render()
@@ -25,12 +27,17 @@ class ShowData extends Component
         ]);
     }
 
+    public function readRawFile()
+    {
+        $this->rawData = file(storage_path('app\txt_raw.log', FILE_IGNORE_NEW_LINES));
+    }
+
     public function decode($index)
     {
         $decoder = new TeltonikaDecoder($this->rawData[$index]);
 
         foreach ($decoder->getArrayOfAllData() as $data) {
-            $this->decodedData->push($data);
+            $this->decodedData[] = $data;
         }
     }
 
@@ -40,7 +47,7 @@ class ShowData extends Component
         $decoder = new TeltonikaDecoder($this->rawData[$index]);
 
         foreach ($decoder->decodeAndSaveData() as $data) {
-            $this->decodedData->push($data);
+            $this->decodedData[] = $data;
         }
     }
 }

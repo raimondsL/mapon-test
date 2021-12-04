@@ -10,7 +10,7 @@ class AVLData extends Model
     protected $guarded = [];
 
     protected $casts = [
-        'timestamp' => 'datetime',
+        'timestamp' => 'datetime:Y-m-d H:i:s',
         'gps_data' => 'array',
         'io_data' => 'array',
     ];
